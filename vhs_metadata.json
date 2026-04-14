@@ -1,0 +1,16 @@
+[
+  {
+    "post_id": 123,
+    "title_ru": "Терминатор",
+    "title_en": "The Terminator",
+    "year": 1984,
+    "director": "James Cameron",
+    "runtime": "107 min",
+    "ratings": {
+      "imdb": "8.1",
+      "rt": "100%"
+    },
+    "cast": ["Arnold Schwarzenegger", "Linda Hamilton"],
+    "overview": "Киборг-убийца из будущего прибывает в 1984 год..."
+  }
+]
