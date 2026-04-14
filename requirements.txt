@@ -1,0 +1,22 @@
+# --- Telegram Engines ---
+Telethon==1.40.0
+aiogram==3.15.0
+python-telegram-bot==20.6
+
+# --- Networking & API ---
+aiohttp==3.10.11
+requests==2.32.5
+feedparser==6.0.11
+streamlink==8.2.1
+
+# --- AI & Translation ---
+g4f==0.6.1.6
+
+# --- System & Media ---
+psutil==5.9.0
+pillow==12.1.0
+aiofiles==24.1.0
+
+# --- Data Validation (Dependencies) ---
+pydantic==2.9.2
+typing_extensions==4.15.0
