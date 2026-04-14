@@ -11,7 +11,7 @@ def get_last_vhs_id():
     Находит ID последнего скачанного фильма в истории загрузок.
     Зачем: Чтобы знать, для какого фильма генерировать описание.
     """
-    history_path = Path(conf.PATHS.download_history)
+    history_path = Path(conf.PATHS.downloaded_history)
     if not history_path.exists():
         return None
     try:
