@@ -91,3 +91,25 @@
 ## ⚠️ 6. Важные замечания
 *   **Цензура:** Модуль `messenger.py` использует `blacklistedwords.txt` для автоматической фильтрации приветов в эфире.
 *   **Тайминги:** Переключение эфира настроено на `59:45` каждого часа. Это дает 15 секунд на "прогрев" нового процесса FFmpeg и переподключение RTMP-клиентов.
+
+
+ONT LICENSE INFORMATION
+
+The font file "Flexi_IBM_VGA_False_437.ttf" included in this repository 
+is a part of "The Ultimate Oldschool PC Font Pack".
+
+Creator: VileR
+Website: https://int10h.org/oldschool-pc-fonts/
+License: Creative Commons Attribution-ShareAlike 4.0 International (CC BY-SA 4.0)
+
+You are free to:
+- Share: copy and redistribute the material in any medium or format.
+- Adapt: remix, transform, and build upon the material for any purpose, even commercially.
+
+Under the following terms:
+- Attribution: You must give appropriate credit, provide a link to the license, 
+  and indicate if changes were made.
+- ShareAlike: If you remix, transform, or build upon the material, you must 
+  distribute your contributions under the same license as the original.
+
+Full license text: https://creativecommons.org/licenses/by-sa/4.0/
