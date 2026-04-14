@@ -1,0 +1,27 @@
+{
+  "night_jingles": {
+    "last_played": "nightjingle08.m4a"
+  },
+  "jingles": {
+    "last_played": "jingle02.m4a"
+  },
+  "day_jingles": {
+    "last_played": "jingle03.m4a"
+  },
+  "ad_rotation": {
+    "played": [
+      "ad02.m4a"
+    ],
+    "recent": [
+      "ad02.m4a"
+    ]
+  },
+  "randomshit": {
+    "played": [
+      "randomshit.m4a"
+    ],
+    "recent": [
+      "randomshit.m4a"
+    ]
+  }
+}
