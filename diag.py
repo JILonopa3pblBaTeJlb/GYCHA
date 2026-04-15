@@ -15,13 +15,10 @@ _diag_state = {
 
 def sanitize_for_ffmpeg(text: str) -> str:
     """
-    Экранирует спецсимволы и очищает строку перед передачей в фильтр drawtext FFmpeg.
-    Удаляет символы, которые могут вызвать ошибку парсинга командной строки.
+    Очищает строку от символов, которые могут сломать логику drawtext,
+    но НЕ экранирует их (экранирование делает status.py).
     """
-    # Экранируем обратные слэши и проценты
-    text = text.replace('\\', '\\\\')
-    text = text.replace('%', '%%')
-    # Оставляем только безопасный набор символов (буквы, цифры, знаки препинания)
+    # Убираем всё, кроме разрешенного набора
     clean = re.sub(r'[^a-zA-Zа-яА-ЯЁё0-9\s\.,:!\-\[\]\(\)\|║═╗╚╝_\\\/]', '', text)
     return clean
 
@@ -103,63 +100,49 @@ async def run_mtr():
 
 def get_diag_lines() -> list[str]:
     """
-    Формирует визуальный блок «NODE HEALTH» для вывода в FFmpeg.
-    Собирает данные из vmstat и mtr в красивый ASCII-контейнер.
+    Формирует визуальный блок «NODE HEALTH».
     """
     lines = []
     HEADER_STR = "═════════NODE HEALTH══════════╗"
     FOOTER_STR = "═════════════════════════════════╝"
-    CONTENT_WIDTH = 30 # Ширина внутренней части рамки
+    CONTENT_WIDTH = 30 
 
-    # Верхняя граница
     lines.append(HEADER_STR.rjust(LINE_WIDTH))
     
-    # Логотип/Заголовок VMSTAT (ASCII-арт)
     vm_ascii = [
         r"_  _ _  _ ____ ___ ____ ___ ",
         r"|  | |\/| [__   |  |__|  |  ",
         r" \/  |  | ___]  |  |  |  |  "
     ]
     for row in vm_ascii:
-        san_row = sanitize_for_ffmpeg(row)
-        # Учитываем экранирование слэшей при расчете отступов
-        extra = row.count('\\')
-        lines.append((san_row.center(CONTENT_WIDTH) + "║").rjust(LINE_WIDTH + extra))
+        # Просто центрируем сырую строку
+        lines.append((row.center(CONTENT_WIDTH) + "║").rjust(LINE_WIDTH))
         
-    # Данные о загрузке процессора
     v_stat = f"[st: avg {_diag_state['vmstat_boot']} | 30s: {_diag_state['vmstat_30s']}]"
-    lines.append((sanitize_for_ffmpeg(v_stat).center(CONTENT_WIDTH) + "║").rjust(LINE_WIDTH))
+    lines.append((v_stat.center(CONTENT_WIDTH) + "║").rjust(LINE_WIDTH))
     
-    # Разделитель
     empty_row = (" " * CONTENT_WIDTH + "║").rjust(LINE_WIDTH)
     lines.append(empty_row)
     
-    # Логотип/Заголовок MTR (ASCII-арт)
     mtr_ascii = [
         r"  _  _ ___ ____ ",
         r" |\/|  |  |__/ ",
         r" |  |  |  |  \ "
     ]
     for row in mtr_ascii:
-        san_row = sanitize_for_ffmpeg(row)
-        extra = row.count('\\')
-        lines.append((san_row.center(CONTENT_WIDTH) + "║").rjust(LINE_WIDTH + extra))
+        lines.append((row.center(CONTENT_WIDTH) + "║").rjust(LINE_WIDTH))
     
-    # Результаты трассировки (последние 7 прыжков)
     mtr_data = _diag_state["mtr_lines"]
     if not mtr_data:
-        msg = "INITIALIZING...".center(CONTENT_WIDTH) + "║"
-        lines.append(msg.rjust(LINE_WIDTH))
+        lines.append("INITIALIZING...".center(CONTENT_WIDTH).rjust(LINE_WIDTH) + "║")
     else:
         for m in mtr_data[:7]:
+            # Берем очищенную строку MTR
             m_san = sanitize_for_ffmpeg(m)
-            row_content = f"     {m_san}     ║"
-            lines.append(row_content.rjust(LINE_WIDTH))
+            lines.append((m_san.center(CONTENT_WIDTH) + "║").rjust(LINE_WIDTH))
         
-    # Заполняем пустое пространство до фиксированной высоты блока
     while len(lines) < 17:
         lines.append(empty_row)
         
-    # Нижняя граница
     lines.append(FOOTER_STR.rjust(LINE_WIDTH))
     return lines
