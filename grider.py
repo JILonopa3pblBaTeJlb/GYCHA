@@ -292,21 +292,23 @@ class RadioGridApp:
         sh, sw = curses.LINES, curses.COLS
         help_text = [
             "ГОРЯЧИЕ КЛАВИШИ:",
-            " Стрелки / hjkl : Навигация",
-            " Enter / e      : Выбрать программу из списка",
-            " d              : Очистить ячейку (удалить программу)",
-            " s              : Сохранить все изменения в .txt файлы",
-            " v              : Показать/скрыть блоки кино (VHS)",
-            " n              : Добавить новое имя программы (в окне выбора)",
-            " q              : Выйти из редактора",
-            " h              : Эта справка",
+            " Стрелки       : Навигация по сетке",
+            " Enter / e     : Выбрать программу из списка",
+            " d             : Очистить ячейку (удалить программу)",
+            " s             : Сохранить все изменения в .txt файлы",
+            " v             : Показать/скрыть блоки кино (VHS)",
+            " n             : Добавить новое имя программы (в окне выбора)",
+            " q             : Выйти из редактора",
+            " h             : Эта справка",
             "",
             "Нажмите любую клавишу для возврата..."
         ]
         win = curses.newwin(len(help_text) + 2, 50, (sh - len(help_text)) // 2, (sw - 50) // 2)
         win.border()
         for i, line in enumerate(help_text):
-            win.addstr(i + 1, 2, line)
+            try:
+                win.addstr(i + 1, 2, line)
+            except curses.error: pass
         win.refresh()
         win.getch()
         del win
@@ -315,12 +317,15 @@ class RadioGridApp:
         """Главный цикл обработки ввода."""
         while True:
             self.draw()
-            ch = self.stdscr.getch()
+            try:
+                ch = self.stdscr.getch()
+            except KeyboardInterrupt:
+                break
             
-            if ch == curses.KEY_RIGHT or ch == ord('l'): self.move_grid(1, 0)
-            elif ch == curses.KEY_LEFT or ch == ord('h'): self.move_grid(-1, 0)
-            elif ch == curses.KEY_UP or ch == ord('k'): self.move_grid(0, -1)
-            elif ch == curses.KEY_DOWN or ch == ord('j'): self.move_grid(0, 1)
+            if ch == curses.KEY_RIGHT: self.move_grid(1, 0)
+            elif ch == curses.KEY_LEFT: self.move_grid(-1, 0)
+            elif ch == curses.KEY_UP: self.move_grid(0, -1)
+            elif ch == curses.KEY_DOWN: self.move_grid(0, 1)
             
             elif ch in (10, 13, ord('e')):
                 self.show_program_overlay()
@@ -333,7 +338,6 @@ class RadioGridApp:
                 self.show_vhs = not self.show_vhs
             elif ch == ord('q'):
                 if self.changed:
-                    # Если есть изменения, запрашиваем подтверждение выхода
                     confirm = self.prompt_string("Изменения не сохранены! Выйти? (y/n)")
                     if confirm and confirm.lower() == 'y': break
                 else: break
