@@ -1,4 +1,3 @@
-
 import asyncio
 import datetime
 import os
@@ -13,32 +12,44 @@ PIP_DIR = conf.PATHS.pip_dir
 PLAYLIST_FILE = conf.PATHS.playlist_file
 CONCAT_OVERLAY_FILE = conf.PATHS.overlay_concat_file
 
+def _get_abs_path(rel_path):
+    """Превращает относительный путь из конфига в абсолютный."""
+    return Path(conf.GLOBAL.base_dir).resolve() / rel_path
+
 def _get_raw_template(template_attr):
     if isinstance(template_attr, list):
         return ",".join(map(str, template_attr))
-    return str(template_attr)
+    # Очищаем шаблон от переносов строк и лишних пробелов
+    return " ".join(str(template_attr).split())
 
 def get_ffmpeg2_cmd():
     """Формирует команду старта часа для RTMPS Telegram."""
     template = _get_raw_template(conf.FFMPEG_TEMPLATES.standard)
     
-    # Фолбеки на случай, если в config.ini забыли прописать параметры
-    fps = conf.FFMPEG_SETTINGS.fps or 25
-    gop = conf.FFMPEG_SETTINGS.gop or 50
+    # Резолвим пути к критичным файлам
+    abs_cover = _get_abs_path(conf.PATHS.cover_image)
+    abs_playlist = _get_abs_path(conf.PATHS.playlist_file)
+    abs_overlay = _get_abs_path(conf.PATHS.overlay_concat_file)
+    abs_font = _get_abs_path(conf.GLOBAL.font_main)
+    abs_log = _get_abs_path(conf.GLOBAL.log_buffer_file)
     
+    # Гарантируем наличие файла логов
+    if not abs_log.exists():
+        abs_log.touch()
+
     cmd_str = template.format(
-        cover_image=conf.PATHS.cover_image,
-        font=conf.GLOBAL.font_main,
-        playlist=PLAYLIST_FILE,
-        overlay_concat=CONCAT_OVERLAY_FILE,
-        log_file=conf.GLOBAL.log_buffer_file,
-        v_bitrate=conf.FFMPEG_SETTINGS.v_bitrate or "400k",
-        v_maxrate=conf.FFMPEG_SETTINGS.v_maxrate or "600k",
-        v_bufsize=conf.FFMPEG_SETTINGS.v_bufsize or "1200k",
-        a_bitrate=conf.FFMPEG_SETTINGS.a_bitrate or "128k",
+        cover_image=abs_cover.as_posix(),
+        font=abs_font.as_posix(),
+        playlist=abs_playlist.as_posix(),
+        overlay_concat=abs_overlay.as_posix(),
+        log_file=abs_log.as_posix(),
+        v_bitrate=conf.FFMPEG_SETTINGS.v_bitrate,
+        v_maxrate=conf.FFMPEG_SETTINGS.v_maxrate,
+        v_bufsize=conf.FFMPEG_SETTINGS.v_bufsize,
+        a_bitrate=conf.FFMPEG_SETTINGS.a_bitrate,
         rtmp_url=conf.FFMPEG_SETTINGS.rtmp_url,
-        fps=fps,
-        gop=gop
+        fps=conf.FFMPEG_SETTINGS.fps or 25,
+        gop=conf.FFMPEG_SETTINGS.gop or 50
     )
     
     return shlex.split(cmd_str)
@@ -46,57 +57,68 @@ def get_ffmpeg2_cmd():
 def get_ffmpeg3_cmd():
     """Формирует команду подхвата эфира (seek) для RTMPS Telegram."""
     now = datetime.datetime.now()
-    sec = now.second + now.minute * 60
-    offset = max(sec - 90, 0)
+    # Считаем смещение от начала часа (с запасом 5 секунд на старт)
+    offset = max((now.minute * 60 + now.second) - 5, 0)
     
     template = _get_raw_template(conf.FFMPEG_TEMPLATES.standard)
     
-    fps = conf.FFMPEG_SETTINGS.fps or 25
-    gop = conf.FFMPEG_SETTINGS.gop or 50
-    
+    abs_cover = _get_abs_path(conf.PATHS.cover_image)
+    abs_playlist = _get_abs_path(conf.PATHS.playlist_file)
+    abs_overlay = _get_abs_path(conf.PATHS.overlay_concat_file)
+    abs_font = _get_abs_path(conf.GLOBAL.font_main)
+    abs_log = _get_abs_path(conf.GLOBAL.log_buffer_file)
+
+    if not abs_log.exists():
+        abs_log.touch()
+
     cmd_str = template.format(
-        cover_image=conf.PATHS.cover_image,
-        font=conf.GLOBAL.font_main,
-        playlist=PLAYLIST_FILE,
-        overlay_concat=CONCAT_OVERLAY_FILE,
-        log_file=conf.GLOBAL.log_buffer_file,
-        v_bitrate=conf.FFMPEG_SETTINGS.v_bitrate or "400k",
-        v_maxrate=conf.FFMPEG_SETTINGS.v_maxrate or "600k",
-        v_bufsize=conf.FFMPEG_SETTINGS.v_bufsize or "1200k",
-        a_bitrate=conf.FFMPEG_SETTINGS.a_bitrate or "128k",
+        cover_image=abs_cover.as_posix(),
+        font=abs_font.as_posix(),
+        playlist=abs_playlist.as_posix(),
+        overlay_concat=abs_overlay.as_posix(),
+        log_file=abs_log.as_posix(),
+        v_bitrate=conf.FFMPEG_SETTINGS.v_bitrate,
+        v_maxrate=conf.FFMPEG_SETTINGS.v_maxrate,
+        v_bufsize=conf.FFMPEG_SETTINGS.v_bufsize,
+        a_bitrate=conf.FFMPEG_SETTINGS.a_bitrate,
         rtmp_url=conf.FFMPEG_SETTINGS.rtmp_url,
-        fps=fps,
-        gop=gop
+        fps=conf.FFMPEG_SETTINGS.fps or 25,
+        gop=conf.FFMPEG_SETTINGS.gop or 50
     )
     
-    # Вставляем перемотку перед входом плейлиста
-    marker = f"-i {PLAYLIST_FILE}"
+    # Вставляем перемотку ПЕРЕД плейлистом
+    # Важно: ищем именно путь к плейлисту в уже сформированной строке
+    marker = f"-i {abs_playlist.as_posix()}"
     if marker in cmd_str:
         cmd_str = cmd_str.replace(marker, f"-ss {offset} {marker}")
 
     return shlex.split(cmd_str)
 
 def build_overlay_concat():
-    pip_path = Path(conf.PATHS.pip_dir)
+    base_dir = Path(conf.GLOBAL.base_dir).resolve()
+    pip_path = base_dir / conf.PATHS.pip_dir
+    overlay_file = base_dir / CONCAT_OVERLAY_FILE
+
     if not pip_path.exists():
         pip_path.mkdir(parents=True, exist_ok=True)
         
-    mp4_files = [f for f in os.listdir(conf.PATHS.pip_dir) if f.lower().endswith(".mp4")]
+    mp4_files = [f for f in os.listdir(pip_path) if f.lower().endswith(".mp4")]
     if not mp4_files:
-        # Резервный файл, если папка пуста
-        with open(CONCAT_OVERLAY_FILE, "w", encoding="utf-8") as f:
-            f.write(f"file '{conf.PATHS.cover_image}'\n")
+        with open(overlay_file, "w", encoding="utf-8") as f:
+            f.write(f"file '{_get_abs_path(conf.PATHS.cover_image).as_posix()}'\n")
         return
             
     random.shuffle(mp4_files)
-    with open(CONCAT_OVERLAY_FILE, "w", encoding="utf-8") as f:
+    with open(overlay_file, "w", encoding="utf-8") as f:
         for mp4 in mp4_files:
-            abs_path = Path(conf.PATHS.pip_dir) / mp4
+            abs_path = (pip_path / mp4).resolve()
             f.write(f"file '{abs_path.as_posix()}'\n")
 
 async def run_ffmpeg(cmd, name=None):
     name = name or "FFmpeg"
     print(f"▶️ Запуск: {name}")
+    # Вывод команды для отладки (можно закомментировать позже)
+    # print(f"DEBUG CMD: {' '.join(cmd)}")
     return await asyncio.create_subprocess_exec(
         *cmd,
         stdout=asyncio.subprocess.PIPE,
@@ -112,12 +134,15 @@ async def stop_proc(proc, name):
         await asyncio.wait_for(proc.wait(), timeout=5)
     except (asyncio.TimeoutError, ProcessLookupError):
         try:
-            proc.kill()
+            proc.terminate()
+            await asyncio.sleep(1)
+            if proc.returncode is None:
+                proc.kill()
         except: pass
     print(f"✅ {name} остановлен.")
 
 async def log_to_file(name, message):
-    log_path = conf.PATHS.system_log
+    log_path = _get_abs_path(conf.PATHS.system_log)
     with open(log_path, "a", encoding="utf-8") as f:
         ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         f.write(f"[{ts}][{name}] {message}\n")
