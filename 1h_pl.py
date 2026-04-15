@@ -142,7 +142,8 @@ def get_ad_with_history(history):
     played = key_hist.get("played", [])
     recent = key_hist.get("recent", [])
 
-    if set(played) >= [t.name for t in all_ads]:
+    # ИСПРАВЛЕНО: Сравниваем set с set, чтобы определить окончание цикла ротации
+    if set(played) >= set(t.name for t in all_ads):
         played = []
         
     candidates = [t for t in all_ads if t.name not in played and t.name not in recent] or all_ads
