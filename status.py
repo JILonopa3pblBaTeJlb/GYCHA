@@ -119,6 +119,21 @@ def sys_log(text):
     """Служебная функция для внутреннего логирования (отключена для экономии ресурсов)."""
     pass
 
+def ffmpeg_escape(text):
+    """
+    Экранирует спецсимволы для drawtext FFmpeg.
+    Важно: проценты и слэши должны быть удвоены.
+    """
+    if not text:
+        return ""
+    # Порядок важен: сначала слэши, потом проценты
+    text = text.replace('\\', '\\\\')
+    text = text.replace('%', '%%')
+    # Экранируем одинарные кавычки, если они есть
+    text = text.replace("'", "\\'")
+    return text
+
+
 def get_terminal_width():
     """Определяет ширину терминала для корректной верстки фона."""
     try:
@@ -188,31 +203,15 @@ def check_input():
         if key.lower() == 'v':
             SHOW_CONSOLE = not SHOW_CONSOLE
 
-def sync_write_logfile(content):
-    """
-    Атомарно записывает итоговую ASCII-картину в файл лога.
-    FFmpeg считывает этот файл для отображения интерфейса на стриме.
-    """
-    try:
-        log_file = conf.GLOBAL.log_buffer_file
-        tmp_logfile = log_file + ".tmp"
-        with open(tmp_logfile, "w", encoding="utf-8") as f:
-            f.write(content)
-        os.replace(tmp_logfile, log_file)
-    except: pass
-
 async def renderer():
     """
     ГЛАВНЫЙ ЦИКЛ ОТРИСОВКИ. 
-    Работает с частотой refresh_rate_sec (обычно 1 раз в секунду).
-    Формирует итоговый кадр, переключает панели и управляет прокруткой.
     """
     global SHOW_CONSOLE
-    CLEAR = '\033[2J\033[H' # Код очистки экрана терминала
+    CLEAR = '\033[2J\033[H'
     weather_scroll_idx = 0
     rss_scroll_idx = 0
     
-    # Режим правой панели (циклическая смена: Диагностика -> UVB -> Фильм -> Расписание)
     RIGHT_PANEL_MODE = "DIAG"
     mode_timer = 0
     tick_counter = 0
@@ -220,7 +219,6 @@ async def renderer():
     last_clock_min = -1
     cached_clock_lines = []
     
-    # Настройка терминала для неблокирующего чтения клавиатуры
     fd = sys.stdin.fileno()
     old_settings = termios.tcgetattr(fd)
     
@@ -233,7 +231,6 @@ async def renderer():
             refresh_rate = conf.GUI_STATUS.refresh_rate_sec
             weather_window = conf.GUI_STATUS.weather_window_size
             
-            # Логика прокрутки погоды и новостей
             if tick_counter % 10 == 0:
                 w_lines = STATE.get("weather", [])
                 if w_lines: weather_scroll_idx = (weather_scroll_idx + 1) % len(w_lines)
@@ -243,20 +240,16 @@ async def renderer():
             # --- УПРАВЛЕНИЕ СОСТОЯНИЕМ ПРАВОЙ ПАНЕЛИ ---
             vhs_hour, vhs_days = load_vhs_params()
             
-            # Переключение между DIAG, UVB, MOVIE и SCHEDULE по таймеру
             if RIGHT_PANEL_MODE == "DIAG" and mode_timer >= 10:
-                RIGHT_PANEL_MODE = "UVB_1"
-                mode_timer = 0
+                RIGHT_PANEL_MODE = "UVB_1"; mode_timer = 0
             elif RIGHT_PANEL_MODE == "UVB_1" and mode_timer >= 10:
                 is_vhs = datetime.now().weekday() in vhs_days and STATE.get("movie_data")
-                RIGHT_PANEL_MODE = "MOVIE" if is_vhs else "UVB_2"
-                mode_timer = 0
+                RIGHT_PANEL_MODE = "MOVIE" if is_vhs else "UVB_2"; mode_timer = 0
             elif RIGHT_PANEL_MODE == "MOVIE":
                 m_data = STATE.get("movie_data")
                 if not m_data:
                     RIGHT_PANEL_MODE = "UVB_2"; mode_timer = 0
                 else:
-                    # Рассчитываем время на чтение всех страниц описания фильма
                     lines_for_desc = max(1, 16 - len(m_data["fixed_header"]))
                     total_pages = max(1, (len(m_data["description"]) + lines_for_desc - 1) // lines_for_desc)
                     if mode_timer >= total_pages * 10:
@@ -273,12 +266,10 @@ async def renderer():
             # --- СБОРКА КАДРА ---
             term_width = get_terminal_width()
             
-            # Левая колонка (Ресурсы, Финансы, Погода, Плейлист, Бегущая строка)
             left_col = [""] * 5
             for key in ["res", "finance"]:
                 if STATE.get(key): left_col.extend(STATE[key])
 
-            # Виджет погоды с вертикальной прокруткой
             w_lines = STATE.get("weather", [])
             if w_lines:
                 for i in range(weather_window):
@@ -286,22 +277,18 @@ async def renderer():
             
             left_col.append("")
             if STATE.get("lineup"): left_col.extend(STATE["lineup"])
-            
             left_col.append("")
             left_col.append(messenger.get_broadcast_line() or "—")
 
-            # Новостная лента
             rss_lines = STATE.get("rss", [])
             if rss_lines: left_col.append(rss_lines[rss_scroll_idx % len(rss_lines)])
 
-            # Формирование правой колонки на основе активного режима
             right_col = []
             if "UVB" in RIGHT_PANEL_MODE:
                 right_col = list(STATE.get("uvb", []))
             elif RIGHT_PANEL_MODE == "DIAG":
                 right_col = list(STATE.get("diag", []))
             elif RIGHT_PANEL_MODE == "SCHEDULE":
-                # Отрисовка блоков расписания
                 blocks = STATE.get("long_schedule", [])
                 if blocks:
                     block_idx = min(mode_timer // 10, len(blocks) - 1)
@@ -315,7 +302,6 @@ async def renderer():
                     while len(right_col) < 17: right_col.append((" " * 30 + "║").rjust(45))
                     right_col.append("═════════════════════════════════╝".rjust(45))
             elif RIGHT_PANEL_MODE == "MOVIE":
-                # Отрисовка карточки фильма с постраничной прокруткой описания
                 m_data = STATE.get("movie_data")
                 if m_data:
                     lines_for_desc = max(1, 16 - len(m_data["fixed_header"]))
@@ -325,31 +311,33 @@ async def renderer():
                     
                     right_col.append(m_data["header_ui"].rjust(45))
                     for row in m_data["fixed_header"] + desc_pg:
-                        safe = row.replace('\\', '\\\\').replace('%', '%%')
-                        extra = safe.count('\\') // 2
-                        right_col.append((safe.ljust(34 + extra) + "║").rjust(45 + extra))
+                        # Убрали локальное экранирование, теперь всё делает общая функция в конце
+                        right_col.append((row.ljust(34) + "║").rjust(45))
                     while len(right_col) < 17: right_col.append((" " * 34 + "║").rjust(45))
                     right_col.append("══════════════════════════════╝".rjust(45))
 
-            # Компоновка всех элементов на финальный холст
-            total_lines = max(len(left_col), 32)
-            canvas = create_background(total_lines, term_width)
+            canvas = create_background(max(len(left_col), 32), term_width)
             canvas = overlay_block(canvas, right_col, start_row=5, start_col=81)
             canvas = overlay_block(canvas, left_col, start_row=0, start_col=0)
             
-            # Добавление ASCII-часов с учетом оффсета (задержки трансляции)
             now_off = datetime.now() + timedelta(seconds=conf.GUI_STATUS.clock_offset_sec)
             if now_off.minute != last_clock_min:
                 cached_clock_lines = clock.get_clock_lines(now_off)
                 last_clock_min = now_off.minute
             canvas = overlay_block(canvas, cached_clock_lines, start_row=29, start_col=35)
             
-            # Финализация: запись в буфер и опциональный вывод в консоль
-            final_frame = "\n".join(canvas)
-            await asyncio.to_thread(sync_write_logfile, final_frame)
+            # --- ФИНАЛЬНЫЙ ВЫВОД ---
+            raw_frame = "\n".join(canvas)
+            
+            # Экранируем всё для FFmpeg
+            ffmpeg_ready_frame = ffmpeg_escape(raw_frame)
+            
+            # Пишем в файл
+            await asyncio.to_thread(sync_write_logfile, ffmpeg_ready_frame)
 
             if SHOW_CONSOLE:
-                print(CLEAR + final_frame, flush=True)
+                # В консоль шлем чистый текст без двойных слэшей
+                print(CLEAR + raw_frame, flush=True)
 
             mode_timer += refresh_rate
             tick_counter += 1
@@ -357,7 +345,7 @@ async def renderer():
 
     finally:
         termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
-
+        
 async def main():
     """Точка входа. Инициализирует асинхронную сессию и запускает все модули."""
     async with aiohttp.ClientSession() as session:
