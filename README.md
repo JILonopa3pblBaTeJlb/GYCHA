@@ -1,6 +1,6 @@
 ***
 
-# 📼 Radio GYCHA: Ultra-Automated Streaming Engine 📡
+# 📼 Radio GYCHA 📡
 
 **Radio GYCHA** — это высокотехнологичный программный стек на базе Python и FFmpeg, предназначенный для создания автономных трансляций. 
 
