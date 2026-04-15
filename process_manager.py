@@ -90,7 +90,7 @@ class ProcessManager:
     
     async def _create_process(self, process_type: ProcessType, **kwargs):
         if process_type in [ProcessType.FFMPEG2, ProcessType.FFMPEG3]:
-            build_overlay_concat()
+            await asyncio.to_thread(build_overlay_concat)
         
         if process_type == ProcessType.FFMPEG2:
             cmd = get_ffmpeg2_cmd()
@@ -118,8 +118,6 @@ class ProcessManager:
         start_time = datetime.datetime.now()
         
         try:
-            # Воркер для чтения stderr. Используем read(порция), а не readline,
-            # так как TLS handshake может не содержать символов новой строки.
             async def stream_reader():
                 nonlocal last_output_time
                 try:
@@ -143,10 +141,9 @@ class ProcessManager:
                 # Логика детекции зависания
                 hang_limit = conf.AIR_CONTROL.hang_timeout_sec
                 
-                # ГРАЦИЯ ДЛЯ RTMPS (Telegram):
-                # Если процесс запущен менее 20 секунд назад, не убиваем его,
-                # даже если он молчит (идет установка SSL соединения).
-                if uptime > 20 and elapsed > hang_limit:
+                # ГРАЦИЯ ДЛЯ RTMPS: Увеличил окно до 30 секунд.
+                # В это время мы ВООБЩЕ не убиваем процесс за молчание в stderr.
+                if uptime > 30 and elapsed > hang_limit:
                     print(f"💥 Hang детекция {process_type.value}: молчание {elapsed:.1f}с (limit {hang_limit}с)")
                     try:
                         process.kill()
