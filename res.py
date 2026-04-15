@@ -89,8 +89,7 @@ def get_cloud_lines(filename=CLOUD_STORAGE_FILE):
 
 def get_status_lines() -> list[str]:
     """
-    Основная функция-агрегатор. Собирает все системные метрики 
-    и возвращает список отформатированных строк для вывода на экран вещания.
+    Собирает системные метрики. Ставим чистые проценты.
     """
     reboot_time = get_last_reboot_time()
     cpu1, cpu2 = get_cpu_usage()
@@ -103,7 +102,7 @@ def get_status_lines() -> list[str]:
         f"{cloud_line1}",
         f"{cloud_line2}",
         f"LAST_REBOOT: {reboot_time}",
-        f"CPU1 {cpu1:04.1f}% {bar1}",
+        f"CPU1 {cpu1:04.1f}% {bar1}",  # Оставляем один %, status.py сам его удвоит
         f"CPU2 {cpu2:04.1f}% {bar2}",
         f"RAM: {ram_used}Mb / {ram_total}Mb",
         f"HDD: {disk_used:.2f}Gb / {disk_total:.2f}Gb",
