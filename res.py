@@ -1,55 +1,43 @@
-# res.py — Модуль мониторинга системных ресурсов и статистики хранилища
+# res.py
 import os
 import psutil
 from datetime import datetime
 from config_loader import conf
 
-# Динамическое получение пути к файлу статистики из конфига с фолбеком
+# Конфигурация из единого конфига
 CLOUD_STORAGE_FILE = conf.PATHS.cloud_storage_file if hasattr(conf.PATHS, 'cloud_storage_file') else "cloud_storage.txt"
 
+# ---------- ШКАЛА CPU ----------
 def cpu_bar(percent: float) -> str:
-    """
-    Создает визуальную ASCII-шкалу нагрузки на процессор.
-    Использует символы '║' для заполнения и '!' для индикации критической зоны (последние 20%).
-    Пример: [║║║║║║║║..........]
-    """
     mask = "║" * 16 + "!" * 4
-    # Защита от некорректных значений процента
-    p = max(0.0, min(100.0, float(percent or 0)))
-    
-    # Расчет количества сегментов (всего 20 делений по 5% каждое)
-    filled = int(round(p / 5.0))
+    p = 0.0 if percent is None else float(percent)
+    p = 0.0 if p < 0 else (100.0 if p > 100 else p)
+    filled = int(round(p / 5.0))  # 0..20
     return mask[:filled].ljust(20, ".") + "]"
 
 def two_cpu_bars(cpu1: float, cpu2: float) -> tuple[str, str]:
-    """Генерирует две визуальные шкалы для многоядерных систем."""
     return cpu_bar(cpu1), cpu_bar(cpu2)
 
+# ---------- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ----------
 def get_last_reboot_time():
-    """Возвращает дату и время последней загрузки операционной системы."""
     try:
         boot_ts = psutil.boot_time()
         boot_dt = datetime.fromtimestamp(boot_ts)
         return boot_dt.strftime("%m/%d %H:%M:%S")
     except Exception:
-        return "N/A"
+        return "неизвестно"
 
 def get_cpu_usage():
-    """
-    Снимает показатели нагрузки CPU по каждому ядру.
-    interval=None обеспечивает неблокирующее получение мгновенных данных.
-    """
     try:
+        # interval=None важен для неблокирующего вызова!
         usage = psutil.cpu_percent(interval=None, percpu=True)
-        # Поддержка систем с разным количеством ядер
         cpu1 = usage[0] if len(usage) > 0 else 0
-        cpu2 = usage[1] if len(usage) > 1 else cpu1
+        cpu2 = usage[1] if len(usage) > 1 else 0
         return cpu1, cpu2
     except Exception:
         return 0, 0
 
 def get_ram_usage():
-    """Возвращает текущее использование оперативной памяти в мегабайтах."""
     try:
         mem = psutil.virtual_memory()
         used_mb = mem.used // (1024 * 1024)
@@ -59,7 +47,6 @@ def get_ram_usage():
         return 0, 0
 
 def get_disk_usage():
-    """Возвращает занятое и общее пространство на системном диске в гигабайтах."""
     try:
         disk = psutil.disk_usage('/')
         used_gb = disk.used / (1024**3)
@@ -69,28 +56,24 @@ def get_disk_usage():
         return 0, 0
 
 def get_cloud_lines(filename=CLOUD_STORAGE_FILE):
-    """
-    Читает актуальную статистику по количеству медиафайлов из файла.
-    Этот файл формируется модулем content.py после сканирования каналов.
-    """
-    line1, line2 = "Библиотека: обновление...", ""
+    line1, line2 = "cloud_storage пусто", ""
     try:
         if os.path.exists(filename):
             with open(filename, "r", encoding="utf-8") as f:
-                line = f.read().strip()
-                if line:
-                    # Разделяем строку на две части для красивой верстки в интерфейсе
-                    parts = line.split(",", 1)
-                    line1 = parts[0].strip()
-                    line2 = parts[1].strip() if len(parts) > 1 else ""
+                for line in f:
+                    line = line.strip()
+                    if line:
+                        parts = line.split(",", 1)
+                        line1 = parts[0].strip()
+                        line2 = parts[1].strip() if len(parts) > 1 else ""
+                        break
     except Exception:
         pass
     return line1, line2
 
+# ---------- ГЛАВНАЯ ФУНКЦИЯ ВОЗВРАТА ДАННЫХ ----------
 def get_status_lines() -> list[str]:
-    """
-    Собирает системные метрики. Ставим чистые проценты.
-    """
+    """Возвращает список строк для вывода на экран"""
     reboot_time = get_last_reboot_time()
     cpu1, cpu2 = get_cpu_usage()
     bar1, bar2 = two_cpu_bars(cpu1, cpu2)
@@ -98,12 +81,17 @@ def get_status_lines() -> list[str]:
     disk_used, disk_total = get_disk_usage()
     cloud_line1, cloud_line2 = get_cloud_lines()
 
-    return [
+    lines =[
         f"{cloud_line1}",
         f"{cloud_line2}",
         f"LAST_REBOOT: {reboot_time}",
-        f"CPU1 {cpu1:04.1f}% {bar1}",  # Оставляем один %, status.py сам его удвоит
-        f"CPU2 {cpu2:04.1f}% {bar2}",
+        f"CPU1 {cpu1:.1f} {bar1}",
+        f"CPU2 {cpu2:.1f} {bar2}",
         f"RAM: {ram_used}Mb / {ram_total}Mb",
         f"HDD: {disk_used:.2f}Gb / {disk_total:.2f}Gb",
     ]
+    return lines
+
+if __name__ == "__main__":
+    # Для теста
+    print("\n".join(get_status_lines()))
