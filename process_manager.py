@@ -138,9 +138,21 @@ class ProcessManager:
             print(f"❌ Ошибка монитора: {e}")
     
     def is_crashed(self) -> bool:
-        if not self.current_process or not self.monitor_task: return False
-        if not self.monitor_task.done(): return False
-        return self.current_process.process.returncode not in [None, 0, -9]
+        """
+        Проверяет, завершился ли процесс аварийно.
+        Код -9 (SIGKILL) теперь считается крашем, так как он возникает при 
+        принудительном завершении зависшего процесса или нехватке памяти (OOM).
+        """
+        if not self.current_process or not self.monitor_task:
+            return False
+            
+        # Если монитор еще работает — процесс жив
+        if not self.monitor_task.done():
+            return False
+            
+        # Если монитор завершился, проверяем код возврата.
+        # Любой код, кроме 0 (чистый выход), считаем поводом для рестарта.
+        return self.current_process.process.returncode != 0
     
     def is_vhs_active(self) -> bool:
         return (self.current_process and

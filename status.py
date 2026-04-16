@@ -45,22 +45,49 @@ STATE = {
 SHOW_CONSOLE = False
 
 def load_vhs_params():
+    """
+    Загружает параметры VHS из конфига. 
+    Гарантирует, что vhs_days всегда будет списком (даже если в конфиге пусто).
+    """
     try:
-        vhs_hour = conf.AIR_CONTROL.vhs_hour
-        vhs_days = conf.AIR_CONTROL.vhs_days
-        if isinstance(vhs_days, int):
-            vhs_days = [vhs_days]
-        return vhs_hour, vhs_days
+        # Пытаемся взять час, если нет — ставим 20 по умолчанию
+        v_h = conf.AIR_CONTROL.vhs_hour
+        if v_h is None or v_h == "":
+            v_h = 20
+        else:
+            v_h = int(v_h)
+
+        v_d = conf.AIR_CONTROL.vhs_days
+        
+        # Если в конфиге "vhs_days = " (пусто), загрузчик вернет пустую строку
+        if isinstance(v_d, str) or v_d is None:
+            return v_h, []
+        
+        # Если там одно число (int), превращаем в список для корректной работы 'in'
+        if isinstance(v_d, int):
+            return v_h, [v_d]
+        
+        # Если это уже список (распарсено через запятую в config_loader), возвращаем как есть
+        if isinstance(v_d, list):
+            return v_h, v_d
+            
+        return v_h, []
     except Exception:
-        return 18, [4, 5, 6]
+        # Резервные значения на случай критической ошибки парсинга
+        return 20, [4, 5, 6]
 
 async def task_movie():
+    """
+    Фоновая задача обновления данных о фильме.
+    Теперь корректно отрабатывает пустой список дней.
+    """
     movie_file = conf.PATHS.movie_info_file
     while True:
         try:
             v_h, v_d = load_vhs_params()
             now = datetime.now()
-            if now.weekday() in v_d and os.path.exists(movie_file):
+            # Если v_d — пустой список, условие просто не выполнится
+            if v_d and now.weekday() in v_d and os.path.exists(movie_file):
                 offset = conf.CONTENT_MANAGER.vhs_preload_offset_min
                 trigger_dt = now.replace(hour=v_h, minute=0, second=0, microsecond=0) - timedelta(minutes=offset)
                 mtime_dt = datetime.fromtimestamp(os.path.getmtime(movie_file))
@@ -152,8 +179,7 @@ def sync_write_logfile(content):
 async def renderer():
     """
     ГЛАВНЫЙ ЦИКЛ ОТРИСОВКИ.
-    Исправлено: теперь мессенджер добавляется без символа \n, 
-    чтобы не нарушать вертикальное позиционирование ASCII-часов.
+    Использует исправленный load_vhs_params для безопасного переключения режимов.
     """
     global SHOW_CONSOLE
     CLEAR = '\033[2J\033[H'
@@ -182,7 +208,8 @@ async def renderer():
             v_h, v_d = load_vhs_params()
             if mode == "DIAG" and timer >= 10: mode = "UVB_1"; timer = 0
             elif mode == "UVB_1" and timer >= 10:
-                mode = "MOVIE" if (datetime.now().weekday() in v_d and STATE["movie_data"]) else "UVB_2"
+                # Теперь v_d всегда список, и проверка 'in' не упадет
+                mode = "MOVIE" if (v_d and datetime.now().weekday() in v_d and STATE["movie_data"]) else "UVB_2"
                 timer = 0
             elif mode == "MOVIE":
                 m = STATE["movie_data"]
@@ -207,21 +234,16 @@ async def renderer():
                 for i in range(conf.GUI_STATUS.weather_window_size):
                     left.append(STATE["weather"][(w_scroll + i) % len(STATE["weather"])])
             
-            left.append("") # Разделитель перед расписанием
+            left.append("")
             if STATE["lineup"]: left.extend(STATE["lineup"])
             
-            # ИСПРАВЛЕННЫЙ БЛОК: Messenger и RSS
-            # Добавляем строго по одной строке в элемент списка
-            left.append("") # Пустая строка-разделитель (вместо \n)
-            
-            # Проверяем мессенджер. Если модуля нет или он пуст, ставим заглушку
+            left.append("")
             messenger_line = messenger.get_broadcast_line() if hasattr(messenger, 'get_broadcast_line') else None
             left.append(messenger_line or "—")
             
             if STATE["rss"]:
                 left.append(STATE["rss"][r_scroll % len(STATE["rss"])])
 
-            # Правая панель (без изменений)
             right = []
             if "UVB" in mode: right = list(STATE["uvb"])
             elif mode == "DIAG": right = list(STATE["diag"])
@@ -250,14 +272,10 @@ async def renderer():
                     while len(right) < 17: right.append((" " * 34 + "║").rjust(45))
                     right.append("══════════════════════════════╝".rjust(45))
 
-            # Создание фона и оверлей
-            # Важно: оверлей накладывается поверх background, поэтому
-            # если left слишком длинный, часы его просто перекроют (что нам и нужно)
             canvas = create_background(max(len(left), 35), width)
             canvas = overlay_block(canvas, right, 5, 81)
             canvas = overlay_block(canvas, left, 0, 0)
             
-            # Накладываем часы на фиксированные строки 29, 30, 31
             now_c = datetime.now() + timedelta(seconds=conf.GUI_STATUS.clock_offset_sec)
             if now_c.minute != last_min:
                 cached_clock = clock.get_clock_lines(now_c)

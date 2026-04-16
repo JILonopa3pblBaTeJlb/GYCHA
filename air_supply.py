@@ -22,6 +22,19 @@ def next_vhs_occurrence(vhs_hour, vhs_min, vhs_days):
     Вычисляет время следующего киносеанса.
     Проверяет текущий и последующие дни недели на соответствие списку разрешенных дней (vhs_days).
     """
+    # Если в конфиге пусто или значение не задано
+    if vhs_days is None or vhs_days == "":
+        return None
+        
+    # Приводим к списку целых чисел, если из конфига пришла строка или одиночное число
+    if isinstance(vhs_days, (int, float)):
+        vhs_days = [int(vhs_days)]
+    elif isinstance(vhs_days, str):
+        try:
+            vhs_days = [int(x.strip()) for x in vhs_days.split(',') if x.strip()]
+        except ValueError:
+            return None
+
     now = datetime.datetime.now()
     today_weekday = now.weekday()
     

@@ -273,18 +273,33 @@ async def download_with_retry(message, filename, post_id, is_video=False):
 # =============================================================================
 
 async def get_last_post_id(client, chat_id):
-    """Получает ID последнего сообщения в канале."""
-    last_message = await client.get_messages(chat_id, limit=1)
-    return last_message[0].id if last_message else None
+    """Получает ID последнего сообщения в канале с таймаутом."""
+    try:
+        # Устанавливаем таймаут 15 секунд на запрос к API
+        messages = await asyncio.wait_for(client.get_messages(chat_id, limit=1), timeout=15)
+        if messages:
+            return messages[0].id
+        return None
+    except asyncio.TimeoutError:
+        log_step(f"⚠️ Таймаут при получении ID сообщения для {chat_id}")
+        return None
+    except Exception as e:
+        log_step(f"⚠️ Ошибка get_last_post_id для {chat_id}: {e}")
+        return None
+
 
 async def get_real_post_count(client, chat_id, last_id):
-    """Запрашивает общее количество сообщений в канале."""
+    """Запрашивает общее количество сообщений в канале с таймаутом."""
     try:
-        posts = await client.get_messages(chat_id, limit=0)
-        return posts.total if posts.total else last_id
-    except:
-        return 0
-
+        # Используем limit=0 для получения метаданных (включая total)
+        posts = await asyncio.wait_for(client.get_messages(chat_id, limit=0), timeout=15)
+        return posts.total if hasattr(posts, 'total') and posts.total is not None else last_id
+    except asyncio.TimeoutError:
+        log_step(f"⚠️ Таймаут при получении счетчика постов для {chat_id}")
+        return last_id or 0
+    except Exception as e:
+        log_step(f"⚠️ Ошибка get_real_post_count для {chat_id}: {e}")
+        return last_id or 0
 def save_scan_results(vhs_posts, music_posts, total_gb):
     """Записывает статистику библиотеки в текстовый файл для вывода в интерфейс (status.py)."""
     scan_line = f"Фильмов: {vhs_posts}, Музыки: {music_posts}ч, Библиотека: {total_gb:.2f} ГБ"
@@ -307,23 +322,40 @@ async def scan_channels(client):
 
     for name, chat_id in items:
         try:
-            await asyncio.sleep(random.uniform(2, 5))
-            last_id = await get_last_post_id(client, chat_id)
-            if not last_id: continue
-            real_count = await get_real_post_count(client, chat_id, last_id)
+            log_step(f"🔍 Анализ канала: {name} (ID: {chat_id})...")
+            await asyncio.sleep(random.uniform(1, 3))
+            
+            # Оптимизация: получаем всё одним запросом
+            # get_messages возвращает TotalList, у которого есть атрибут .total
+            msgs = await asyncio.wait_for(client.get_messages(chat_id, limit=1), timeout=20)
+            
+            if msgs is None:
+                log_step(f"❓ Канал {name} не вернул сообщений (возможно, пуст или нет доступа)")
+                continue
+                
+            real_count = msgs.total if hasattr(msgs, 'total') and msgs.total is not None else 0
+            if real_count == 0 and len(msgs) > 0:
+                real_count = msgs[0].id
+                
+            log_step(f"📊 Канал {name}: обнаружено {real_count} постов.")
 
             # Оценка веса на основе лимитов из конфига
             limit_mb = conf.CONTENT_MANAGER.max_video_size_mb if name == "vhs" else conf.CONTENT_MANAGER.max_audio_size_mb
             total_size += real_count * limit_mb
             
-            if name == "vhs": vhs_posts = real_count
-            elif name != "reading": music_posts += real_count
+            if name == "vhs":
+                vhs_posts = real_count
+            elif name != "reading":
+                music_posts += real_count
             
+        except asyncio.TimeoutError:
+            log_step(f"❌ Канал {name} не ответил за отведенное время (Timeout)")
         except Exception as e:
             log_step(f"⚠️ Ошибка сканирования {name}: {e}")
     
     save_scan_results(vhs_posts, music_posts, total_size / 1024)
     save_last_scan_time()
+    log_step("✅ Сканирование завершено.")
 
 # =============================================================================
 # ОСНОВНАЯ ЛОГИКА ТРИГГЕРОВ
