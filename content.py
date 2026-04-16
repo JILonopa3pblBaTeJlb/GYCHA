@@ -133,8 +133,22 @@ def load_vhs_config():
     """Получает параметры киносеансов из глобального конфига."""
     vhs_hour = conf.AIR_CONTROL.vhs_hour
     vhs_days = conf.AIR_CONTROL.vhs_days
-    if isinstance(vhs_days, int):
-        vhs_days = [vhs_days]
+    
+    # Если в конфиге пусто, возвращаем пустой список
+    if vhs_days is None or vhs_days == "":
+        return vhs_hour, []
+    
+    # Если пришло одиночное число (int/float), оборачиваем в список
+    if isinstance(vhs_days, (int, float)):
+        return vhs_hour, [int(vhs_days)]
+        
+    # Если пришла строка (например, "4,5,6" или "4"), парсим её в список чисел
+    if isinstance(vhs_days, str):
+        try:
+            return vhs_hour, [int(x.strip()) for x in vhs_days.split(',') if x.strip()]
+        except (ValueError, AttributeError):
+            return vhs_hour, []
+            
     return vhs_hour, vhs_days
 
 def load_downloaded():
@@ -491,9 +505,13 @@ def seconds_until_next_trigger(vhs_hour, vhs_days):
     # Следующий VHS
     vhs_trigger = None
     offset = conf.CONTENT_MANAGER.vhs_preload_offset_min
+    
+    # Защита: гарантируем, что vhs_days — это список, чтобы избежать TypeError при 'in'
+    safe_vhs_days = vhs_days if isinstance(vhs_days, (list, tuple, set)) else []
+    
     for days_ahead in range(7):
         check_date = now + timedelta(days=days_ahead)
-        if check_date.weekday() in vhs_days:
+        if check_date.weekday() in safe_vhs_days:
             candidate = check_date.replace(hour=vhs_hour, minute=0, second=0, microsecond=0) - timedelta(minutes=offset)
             if candidate > now:
                 vhs_trigger = candidate
