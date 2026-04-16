@@ -92,23 +92,19 @@ gen_pip_mock() {
 
 gen_audio_mock() {
     ffmpeg -y -f lavfi -i "sine=frequency=$3:duration=$2:sample_rate=44100" \
-           -c:a aac -ar 44100 -b:a 128k "$1" -loglevel error
+           -c:a aac -ar 44100 -ac 2 -b:a 128k "$1" -loglevel error
 }
 
-# Новая функция: Создает длинный трек путем зацикливания короткого семпла
+
 gen_long_track_mock() {
     local TARGET_FILE=$1
     local FREQ=$2
     local TEMP_SEED="seed_temp.m4a"
     
-    # 1. Создаем короткий "зерно" файл на 30 сек
     ffmpeg -y -f lavfi -i "sine=frequency=$FREQ:duration=30:sample_rate=44100" \
-           -c:a aac -ar 44100 -b:a 128k "$TEMP_SEED" -loglevel error
+           -c:a aac -ar 44100 -ac 2 -b:a 128k "$TEMP_SEED" -loglevel error
            
-    # 2. Растягиваем его до 57 минут (3420 сек) через stream_loop
-    # Используем -c copy, так как параметры идентичны - это мгновенно.
     ffmpeg -y -stream_loop -1 -i "$TEMP_SEED" -t 3420 -c copy "$TARGET_FILE" -loglevel error
-    
     rm "$TEMP_SEED"
 }
 
