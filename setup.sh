@@ -143,8 +143,9 @@ if confirm "Сгенерировать контент (Кино, PIPx30, 57-ми
     gen_audio_mock "night_jingles/night_jingle01.m4a" 30 1050
     gen_audio_mock "ad/ad01.m4a" 30 1200
 
-    for h in {00..23}; do
-        gen_audio_mock "timesignals/${h}oclock.m4a" 31 $((800 + 10#$h))
+    for h in {0..23}; do
+      hh=$(printf "%02d" "$h")
+      gen_audio_mock "timesignals/${hh}oclock.m4a" 31
     done
 
     # Треки в жанры (теперь по 57 минут)
